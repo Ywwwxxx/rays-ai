@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerçek Alev Tespit Sistemi</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #0d1b2a;
+            color: white;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 25px;
+            background: rgba(255, 87, 51, 0.15);
+            border-radius: 15px;
+            border: 2px solid rgba(255, 87, 51, 0.3);
+        }
+        h1 { 
+            color: #ff5722; 
+            margin-bottom: 10px; 
+            font-size: 2.5em;
+            text-shadow: 0 2px 10px rgba(255, 87, 51, 0.5);
+        }
+        .subtitle {
+            color: #4fc3f7;
+            font-size: 1.2em;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 1000px) {
+            .main-content { grid-template-columns: 1fr; }
+        }
+        
+        .panel {
+            background: rgba(25, 35, 55, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .panel-title {
+            color: #4fc3f7;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4fc3f7;
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .camera-view {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            position: relative;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Ayna efekti */
+        }
+        
+        #analysisCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .control-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        #startBtn {
+            background: linear-gradient(135deg, #00c853, #00e676);
+            color: white;
+        }
+        
+        #stopBtn {
+            background: linear-gradient(135deg, #ff3d00, #ff5722);
+            color: white;
+        }
+        
+        #detectBtn {
+            background: linear-gradient(135deg, #2979ff, #2962ff);
+            color: white;
+        }
+        
+        .control-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .camera-select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            gap: 2px;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .grid-cell {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 3px;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        
+        .grid-cell.fire-detected {
+            background: linear-gradient(135deg, 
+                rgba(255, 87, 34, 0.95), 
+                rgba(255, 61, 0, 0.9));
+            box-shadow: 
+                0 0 20px rgba(255, 87, 34, 0.8),
+                inset 0 0 30px rgba(255, 193, 7, 0.4);
+            border: 1px solid rgba(255, 235, 59, 0.5);
+            animation: fireGlow 1.5s ease-in-out infinite alternate;
+            z-index: 2;
+        }
+        
+        @keyframes fireGlow {
+            0% {
+                box-shadow: 
+                    0 0 15px rgba(255, 87, 34, 0.7),
+                    inset 0 0 20px rgba(255, 193, 7, 0.3);
+                transform: scale(1);
+            }
+            100% {
+                box-shadow: 
+                    0 0 30px rgba(255, 87, 34, 1),
+                    inset 0 0 40px rgba(255, 193, 7, 0.6);
+                transform: scale(1.05);
+            }
+        }
+        
+        .cell-info {
+            position: absolute;
+            bottom: 3px;
+            right: 3px;
+            font-size: 9px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 2px;
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffeb3b;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .settings {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .threshold-control {
+            margin-bottom: 15px;
+        }
+        
+        .threshold-control label {
+            display: block;
+            margin-bottom: 10px;
+            color: #4fc3f7;
+            font-weight: bold;
+        }
+        
+        #thresholdSlider {
+            width: 100%;
+            height: 10px;
+            -webkit-appearance: none;
+            background: linear-gradient(to right, #00c853, #ffeb3b, #ff5722);
+            border-radius: 5px;
+            outline: none;
+        }
+        
+        #thresholdSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #2979ff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .status-indicator {
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: bold;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+        
+        .status-active {
+            background: rgba(0, 200, 83, 0.2);
+            color: #00e676;
+            border-color: rgba(0, 200, 83, 0.3);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-warning {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffeb3b;
+            border-color: rgba(255, 193, 7, 0.3);
+        }
+        
+        .status-danger {
+            background: rgba(255, 87, 34, 0.2);
+            color: #ff5722;
+            border-color: rgba(255, 87, 34, 0.3);
+            animation: dangerPulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 200, 83, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); }
+        }
+        
+        @keyframes dangerPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .debug-info {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        
+        .model-info {
+            background: rgba(41, 121, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #2979ff;
+        }
+        
+        .warning-box {
+            background: rgba(255, 193, 7, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border-left: 4px solid #ffc107;
+            color: #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔥 GERÇEK ALEV TESPİT SİSTEMİ</h1>
+            <p class="subtitle">Sadece gerçek alevler tespit edilir - Rastgele yanma YOK!</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="panel">
+                <div class="panel-title">📷 KAMERA VE KONTROLLER</div>
+                
+                <div class="camera-view">
+                    <video id="videoElement" autoplay playsinline></video>
+                    <canvas id="analysisCanvas"></canvas>
+                </div>
+                
+                <select id="cameraSelect" class="camera-select">
+                    <option value="">Kamera yükleniyor...</option>
+                </select>
+                
+                <div class="controls">
+                    <button id="startBtn" class="control-btn">
+                        <span>▶️</span> KAMERA AÇ
+                    </button>
+                    <button id="stopBtn" class="control-btn" disabled>
+                        <span>⏹️</span> KAPAT
+                    </button>
+                    <button id="detectBtn" class="control-btn" disabled>
+                        <span>🔥</span> TESPİT BAŞLAT
+                    </button>
+                </div>
+                
+                <div class="settings">
+                    <div class="threshold-control">
+                        <label>📊 Tespit Hassasiyeti: <span id="thresholdValue">%70</span></label>
+                        <input type="range" id="thresholdSlider" min="50" max="95" value="70">
+                    </div>
+                </div>
+                
+                <div id="statusMessage" class="status-indicator">
+                    <span class="loading">⏳</span> Sistem hazırlanıyor...
+                </div>
+                
+                <div class="model-info">
+                    <strong>🤖 MODEL DURUMU:</strong>
+                    <div id="modelStatus">Teachable Machine modeli yükleniyor...</div>
+                </div>
+                
+                <div class="warning-box">
+                    <strong>⚠️ UYARI:</strong> 
+                    Sistem sadece gerçek alevleri tespit eder. Rastgele yanma yapmaz. 
+                    Alev göstermezseniz grid yanmayacaktır.
+                </div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">🧭 8x8 ALEV ANALİZ GRİDİ</div>
+                
+                <div class="grid-container" id="gridContainer">
+                    <!-- Grid hücreleri buraya gelecek -->
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="fireCount">0</div>
+                        <div class="stat-label">ALEVLİ HÜCRE</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="detectionRate">%0</div>
+                        <div class="stat-label">TESPİT ORANI</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="lastUpdate">--:--</div>
+                        <div class="stat-label">SON GÜNCELLEME</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avgConfidence">%0</div>
+                        <div class="stat-label">ORTALAMA GÜVEN</div>
+                    </div>
+                </div>
+                
+                <div class="debug-info">
+                    <strong>DEBUG:</strong> 
+                    <span id="debugText">Sistem başlatılıyor...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TensorFlow.js ve Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+    
+    <script>
+        // ========== SİSTEM KONFİGÜRASYONU ==========
+        const CONFIG = {
+            grid: {
+                size: 8,
+                cellSize: 28 // 224 / 8
+            },
+            detection: {
+                threshold: 0.7, // Başlangıç eşiği %70
+                interval: 1000, // 1 saniyede bir tespit
+                minConfidence: 0.1 // Minimum güven değeri
+            }
+        };
+
+        // ========== DOM ELEMENTLERİ ==========
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('analysisCanvas');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const detectBtn = document.getElementById('detectBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const gridContainer = document.getElementById('gridContainer');
+        const fireCountEl = document.getElementById('fireCount');
+        const detectionRateEl = document.getElementById('detectionRate');
+        const lastUpdateEl = document.getElementById('lastUpdate');
+        const avgConfidenceEl = document.getElementById('avgConfidence');
+        const debugText = document.getElementById('debugText');
+        const modelStatus = document.getElementById('modelStatus');
+
+        // ========== SİSTEM DEĞİŞKENLERİ ==========
+        let model = null;
+        let currentStream = null;
+        let isDetecting = false;
+        let detectionInterval = null;
+        let threshold = CONFIG.detection.threshold;
+        let gridCells = [];
+        let lastDetectionTime = 0;
+
+        // ========== TEACHABLE MACHINE MODELİ YÜKLEME ==========
+        async function loadModel() {
+            try {
+                debugLog('Teachable Machine modeli yükleniyor...');
+                modelStatus.textContent = '⏳ Model yükleniyor...';
+                modelStatus.style.color = '#ffc107';
+                
+                // MODEL DOSYALARINIZI KULLANIYOR
+                const modelURL = 'model.json';
+                const metadataURL = 'metadata.json';
+                
+                // Teachable Machine modelini yükle
+                model = await tmImage.load(modelURL, metadataURL);
+                
+                // Model bilgilerini al
+                const classLabels = model.getClassLabels();
+                debugLog(`Model yüklendi! Sınıflar: ${classLabels.join(', ')}`);
+                
+                // Model bilgilerini göster
+                modelStatus.innerHTML = `
+                    ✅ <strong>Model Yüklendi!</strong><br>
+                    <small>Sınıflar: <strong>${classLabels[0]}</strong> vs <strong>${classLabels[1]}</strong></small>
+                `;
+                modelStatus.style.color = '#00e676';
+                
+                statusMessage.innerHTML = '✅ MODEL HAZIR! Kamerayı açın';
+                statusMessage.className = 'status-indicator status-active';
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Model yükleme hatası:', error);
+                debugLog(`❌ Model hatası: ${error.message}`);
+                modelStatus.textContent = '❌ Model yüklenemedi!';
+                modelStatus.style.color = '#ff5722';
+                
+                statusMessage.innerHTML = '❌ MODEL YÜKLENEMEDİ!';
+                statusMessage.className = 'status-indicator status-danger';
+                
+                alert('HATA: Teachable Machine modeli yüklenemedi!\n\n' +
+                      'Lütfen kontrol edin:\n' +
+                      '1. model.json dosyası var mı?\n' +
+                      '2. metadata.json dosyası var mı?\n' +
+                      '3. weights.bin dosyası var mı?\n' +
+                      '4. Tüm dosyalar aynı klasörde mi?');
+                return false;
+            }
+        }
+
+        // ========== KAMERA İŞLEMLERİ ==========
+        async function startCamera(deviceId = '') {
+            try {
+                debugLog('Kamera başlatılıyor...');
+                updateStatus('Kamera açılıyor...', 'warning');
+                
+                // Önceki stream'i temizle
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // Kamera kısıtlamaları
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30 },
+                        facingMode: 'environment'
+                    },
+                    audio: false
+                };
+                
+                // Belirli kamera seçilmişse
+                if (deviceId) {
+                    constraints.video.deviceId = { exact: deviceId };
+                }
+                
+                // Kamerayı aç
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                // Canvas boyutlarını ayarla
+                await waitForVideoReady();
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                debugLog(`Kamera açıldı: ${video.videoWidth}x${video.videoHeight}`);
+                updateStatus('✅ KAMERA HAZIR!', 'active');
+                
+                // Butonları aktif et
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                detectBtn.disabled = false;
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Kamera hatası:', error);
+                let errorMsg = 'Kamera açılamadı: ';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMsg = '❌ KAMERA İZNİ VERİLMEDİ!\nLütfen tarayıcı izinlerini kontrol edin.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg = '❌ KAMERA BULUNAMADI!';
+                } else if (error.name === 'NotReadableError') {
+                    errorMsg = '❌ KAMERA KULLANIMDA!\nBaşka bir program kamera kullanıyor olabilir.';
+                } else {
+                    errorMsg = `❌ KAMERA HATASI: ${error.message}`;
+                }
+                
+                debugLog(errorMsg);
+                updateStatus(errorMsg, 'danger');
+                
+                // Kamera izni için yardım göster
+                setTimeout(() => {
+                    alert('KAMERA İZNI İÇİN:\n\n' +
+                          '1. Tarayıcı URL çubuğundaki 🔒 veya 📷 ikonuna tıklayın\n' +
+                          '2. "Site ayarları" veya "İzinler" bölümüne girin\n' +
+                          '3. "Kamera" için "İzin ver" seçin\n' +
+                          '4. Sayfayı yenileyin ve tekrar deneyin');
+                }, 1000);
+                
+                return false;
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                // Stream'i durdur
+                currentStream.getTracks().forEach(track => {
+                    track.stop();
+                });
+                currentStream = null;
+                video.srcObject = null;
+                
+                // Tespiti de durdur
+                stopDetection();
+                
+                // Butonları güncelle
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                detectBtn.disabled = true;
+                
+                debugLog('Kamera kapatıldı');
+                updateStatus('Kamera kapalı', 'warning');
+                
+                // Grid'i temizle
+                resetGrid();
+            }
+        }
+
+        async function waitForVideoReady() {
+            return new Promise((resolve) => {
+                if (video.readyState >= 2) {
+                    resolve();
+                } else {
+                    video.onloadedmetadata = () => resolve();
+                }
+            });
+        }
+
+        // ========== GRID OLUŞTURMA ==========
+        function createGrid() {
+            gridContainer.innerHTML = '';
+            gridCells = [];
+            
+            for (let i = 0; i < 64; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                cell.dataset.index = i;
+                
+                // Hücre koordinatları
+                const row = Math.floor(i / 8);
+                const col = i % 8;
+                
+                // Hücre bilgisi
+                const infoSpan = document.createElement('span');
+                infoSpan.className = 'cell-info';
+                infoSpan.textContent = `${row+1},${col+1}`;
+                cell.appendChild(infoSpan);
+                
+                // Hücreye tıklanınca bilgi göster
+                cell.addEventListener('click', () => {
+                    const prob = gridCells[i]?.probability || 0;
+                    alert(`Hücre ${row+1},${col+1}\n` +
+                          `Alev Olasılığı: ${Math.round(prob * 100)}%\n` +
+                          `Eşik Değeri: ${Math.round(threshold * 100)}%`);
+                });
+                
+                gridContainer.appendChild(cell);
+                gridCells.push({
+                    element: cell,
+                    probability: 0,
+                    hasFire: false
+                });
+            }
+            
+            debugLog('8x8 grid oluşturuldu');
+        }
+
+        // ========== ALEV TESPİT FONKSİYONLARI ==========
+        async function startDetection() {
+            if (!model || !currentStream) {
+                alert('Önce model ve kamera hazır olmalı!');
+                return;
+            }
+            
+            if (isDetecting) {
+                stopDetection();
+                return;
+            }
+            
+            isDetecting = true;
+            detectBtn.innerHTML = '<span>⏸️</span> TESPİTİ DURDUR';
+            detectBtn.style.background = 'linear-gradient(135deg, #ff9800, #ff5722)';
+            
+            debugLog('Alev tespiti başlatıldı');
+            updateStatus('🔥 GERÇEK ZAMANLI ALEV TESPİTİ AKTİF', 'active');
+            
+            // Tespit döngüsünü başlat
+            detectionInterval = setInterval(performDetection, CONFIG.detection.interval);
+            
+            // İlk tespiti hemen yap
+            setTimeout(performDetection, 100);
+        }
+
+        function stopDetection() {
+            if (!isDetecting) return;
+            
+            isDetecting = false;
+            clearInterval(detectionInterval);
+            detectionInterval = null;
+            
+            detectBtn.innerHTML = '<span>🔥</span> TESPİT BAŞLAT';
+            detectBtn.style.background = 'linear-gradient(135deg, #2979ff, #2962ff)';
+            
+            debugLog('Alev tespiti durduruldu');
+            updateStatus('Tespit durduruldu', 'warning');
+        }
+
+        async function performDetection() {
+            if (!isDetecting || !currentStream || !model) return;
+            
+            const startTime = Date.now();
+            
+            try {
+                // Video'dan frame al
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Frame'i 224x224 boyutuna küçült (model için)
+                const smallCanvas = document.createElement('canvas');
+                smallCanvas.width = 224;
+                smallCanvas.height = 224;
+                const smallCtx = smallCanvas.getContext('2d');
+                smallCtx.drawImage(canvas, 0, 0, 224, 224);
+                
+                let totalFireCount = 0;
+                let totalConfidence = 0;
+                let cellsWithFire = 0;
+                
+                // Her hücre için tahmin yap
+                for (let i = 0; i < 64; i++) {
+                    const cell = gridCells[i];
+                    const row = Math.floor(i / 8);
+                    const col = i % 8;
+                    
+                    // Hücre görüntüsünü al (28x28 piksel)
+                    const cellCanvas = document.createElement('canvas');
+                    cellCanvas.width = 224; // Model için büyüt
+                    cellCanvas.height = 224;
+                    const cellCtx = cellCanvas.getContext('2d');
+                    
+                    // Hücreyi 224x224 boyutuna büyüt
+                    cellCtx.drawImage(
+                        smallCanvas,
+                        col * 28, row * 28, 28, 28, // Kaynak
+                        0, 0, 224, 224               // Hedef
+                    );
+                    
+                    // Teachable Machine ile tahmin yap
+                    const predictions = await model.predict(cellCanvas);
+                    
+                    // Alev sınıfını bul (metadata.json'daki ilk etiket "Alev" olmalı)
+                    const firePrediction = predictions.find(p => p.className === "Alev");
+                    const probability = firePrediction ? firePrediction.probability : 0;
+                    
+                    // Hücreyi güncelle
+                    cell.probability = probability;
+                    
+                    // Eşik değerine göre alev tespiti
+                    const hasFire = probability > threshold;
+                    cell.hasFire = hasFire;
+                    
+                    // Hücre görünümünü güncelle
+                    if (hasFire) {
+                        cell.element.classList.add('fire-detected');
+                        totalFireCount++;
+                        totalConfidence += probability;
+                        cellsWithFire++;
+                    } else {
+                        cell.element.classList.remove('fire-detected');
+                        // Düşük olasılıkları da göster (isteğe bağlı)
+                        if (probability > CONFIG.detection.minConfidence) {
+                            cell.element.style.background = `rgba(255, 193, 7, ${probability * 0.5})`;
+                        } else {
+                            cell.element.style.background = '';
+                        }
+                    }
+                    
+                    // Hücre tooltip'ini güncelle
+                    cell.element.title = 
+                        `Hücre ${row+1},${col+1}\n` +
+                        `Alev Olasılığı: ${Math.round(probability * 100)}%\n` +
+                        `Durum: ${hasFire ? '🔥 ALEV VAR' : '✅ TEMİZ'}\n` +
+                        `Eşik: ${Math.round(threshold * 100)}%`;
+                }
+                
+                // İstatistikleri güncelle
+                updateStatistics(totalFireCount, totalConfidence, cellsWithFire);
+                
+                const detectionTime = Date.now() - startTime;
+                debugLog(`Tespit tamamlandı: ${totalFireCount} alevli hücre (${detectionTime}ms)`);
+                
+                // Kritik durum kontrolü
+                if (totalFireCount > 0) {
+                    if (totalFireCount > 10) {
+                        updateStatus(`🚨 ${totalFireCount} HÜCREDE ALEV TESPİT EDİLDİ!`, 'danger');
+                        document.title = `🚨 ${totalFireCount} ALEV - ACİL!`;
+                    } else {
+                        updateStatus(`🔥 ${totalFireCount} hücrede alev tespit edildi`, 'warning');
+                        document.title = `🔥 ${totalFireCount} Alevli Hücre`;
+                    }
+                } else {
+                    document.title = 'Alev Tespit Sistemi';
+                }
+                
+            } catch (error) {
+                console.error('Tespit hatası:', error);
+                debugLog(`Tespit hatası: ${error.message}`);
+                updateStatus('Tespit hatası oluştu', 'danger');
+            }
+        }
+
+        function updateStatistics(fireCount, totalConfidence, cellsWithFire) {
+            // Alevli hücre sayısı
+            fireCountEl.textContent = fireCount;
+            
+            // Tespit oranı
+            const detectionRate = Math.round((fireCount / 64) * 100);
+            detectionRateEl.textContent = `%${detectionRate}`;
+            
+            // Ortalama güven
+            const avgConfidence = cellsWithFire > 0 
+                ? Math.round((totalConfidence / cellsWithFire) * 100)
+                : 0;
+            avgConfidenceEl.textContent = `%${avgConfidence}`;
+            
+            // Son güncelleme zamanı
+            const now = new Date();
+            lastUpdateEl.textContent = now.toLocaleTimeString('tr-TR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            lastDetectionTime = Date.now();
+        }
+
+        function resetGrid() {
+            gridCells.forEach(cell => {
+                cell.element.classList.remove('fire-detected');
+                cell.element.style.background = '';
+                cell.probability = 0;
+                cell.hasFire = false;
+            });
+            
+            fireCountEl.textContent = '0';
+            detectionRateEl.textContent = '%0';
+            avgConfidenceEl.textContent = '%0';
+            lastUpdateEl.textContent = '--:--';
+        }
+
+        // ========== YARDIMCI FONKSİYONLAR ==========
+        function debugLog(message) {
+            console.log(message);
+            debugText.textContent = message;
+        }
+
+        function updateStatus(message, type = 'warning') {
+            statusMessage.innerHTML = message;
+            statusMessage.className = `status-indicator status-${type}`;
+        }
+
+        async function listCameras() {
+            try {
+                // Kamera izni al
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                tempStream.getTracks().forEach(track => track.stop());
+                
+                // Kamerları listele
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                
+                cameraSelect.innerHTML = '<option value="">Kamera seçin...</option>';
+                
+                cameras.forEach((camera, index) => {
+                    const option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.text = camera.label || `Kamera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                if (cameras.length > 0) {
+                    debugLog(`${cameras.length} kamera bulundu`);
+                }
+                
+            } catch (error) {
+                console.warn('Kamera listeleme hatası:', error);
+                cameraSelect.innerHTML = '<option value="">Kamera izni gerekli</option>';
+            }
+        }
+
+        // ========== EVENT LISTENERS ==========
+        startBtn.addEventListener('click', () => {
+            const deviceId = cameraSelect.value;
+            startCamera(deviceId);
+        });
+        
+        stopBtn.addEventListener('click', stopCamera);
+        
+        detectBtn.addEventListener('click', () => {
+            if (!isDetecting) {
+                startDetection();
+            } else {
+                stopDetection();
+            }
+        });
+        
+        cameraSelect.addEventListener('change', (e) => {
+            if (e.target.value && currentStream) {
+                startCamera(e.target.value);
+            }
+        });
+        
+        thresholdSlider.addEventListener('input', function() {
+            threshold = this.value / 100;
+            thresholdValue.textContent = `%${this.value}`;
+            debugLog(`Eşik değeri güncellendi: %${this.value}`);
+            
+            // Eğer tespit aktifse, yeni eşik değeriyle hemen tespit yap
+            if (isDetecting) {
+                setTimeout(performDetection, 100);
+            }
+        });
+
+        // ========== SİSTEM BAŞLATMA ==========
+        async function initializeSystem() {
+            debugLog('Sistem başlatılıyor...');
+            
+            // 1. Grid oluştur
+            createGrid();
+            
+            // 2. Teachable Machine modelini yükle
+            const modelLoaded = await loadModel();
+            if (!modelLoaded) return;
+            
+            // 3. Kameraları listele
+            await listCameras();
+            
+            // 4. Sistem hazır mesajı
+            setTimeout(() => {
+                debugLog('✅ SİSTEM HAZIR! Kamerayı açıp alev tespitine başlayabilirsiniz.');
+                updateStatus('✅ SİSTEM HAZIR! Kamerayı açın', 'active');
+                
+                // İlk kamerayı otomatik başlatmayı dene
+                if (cameraSelect.options.length > 1) {
+                    debugLog('İlk kamera otomatik başlatılıyor...');
+                    startBtn.click();
+                }
+            }, 1000);
+        }
+
+        // ========== SAYFA YÜKLENDİĞİNDE ==========
+        document.addEventListener('DOMContentLoaded', initializeSystem);
+        
+        // ========== SAYFA KAPATILIRKEN TEMİZLİK ==========
+        window.addEventListener('beforeunload', () => {
+            stopDetection();
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
